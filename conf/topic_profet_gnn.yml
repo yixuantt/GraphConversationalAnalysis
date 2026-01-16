@@ -1,0 +1,38 @@
+train:
+  batch_size: 64
+  n_epochs: 12
+  loss: "mse_loss"
+  grad_clip: 0
+
+model:
+  embedding_size: 384
+  hidden_size: [300, 200, 100]
+  # hidden_size: [50, 50, 50]
+  hidden_layers: 3
+  dropout: 0.1
+  in_bn: False
+  hid_bn: False
+  out_bn: True
+
+optim:
+  optimizer: 'Adam'
+  lr: 0.0015
+  weight_decay: 0.00001
+
+scheduler:
+  is_scheduler: false
+  lr_dc: 0.1
+  lr_dc_step: 10
+
+data:
+  train_path:
+    - 'dataset/processed/topic_sent_bert_based_data_2015.pkl'
+    - 'dataset/processed/topic_sent_bert_based_data_2016.pkl'
+    - 'dataset/processed/topic_sent_bert_based_data_2017.pkl'
+  test_path:
+    - 'dataset/processed/topic_sent_bert_based_data_2018.pkl'
+  label: 'firm_std_60_post'  # Options: firm_std_10_post, firm_std_20_post, firm_std_60_post
+  batch_size: 16
+
+checkpoint:
+  choice: 'best'  # latest or best
