@@ -13,7 +13,6 @@ import torch.nn as nn
 import torch.nn.functional as F
 import pickle
 import gensim
-# os.environ['CUDA_LAUNCH_BLOCKING'] = '1'
 from tqdm import tqdm
 from model import *
 import torch.optim as optim
@@ -209,7 +208,6 @@ class TopicProfetGNNDataset(Dataset):
         
         kmeans = MiniBatchKMeans(n_clusters=200, batch_size=50, verbose=1)
         kmeans.fit(self.clustering_samples)
-        # labels = kmeans.predict(X)
         with open(self.clustering_path, 'wb') as fOut:
             pickle.dump(kmeans.cluster_centers_, fOut,
                         protocol=pickle.HIGHEST_PROTOCOL)
@@ -221,13 +219,10 @@ class TopicProfetGNNDataset(Dataset):
         X_a = []
         Y = []
         import concurrent.futures
-        # Use ThreadPoolExecutor for parallel execution
         with concurrent.futures.ThreadPoolExecutor(max_workers=2) as executor:
-            # Start two threads to execute task function
             future1 = executor.submit(preprocess_dataset, paths[0], label_name)
             future2 = executor.submit(preprocess_dataset, paths[1], label_name)
 
-            # Get return results
             result1 = future1.result()
             result2 = future2.result()
 
@@ -296,7 +291,6 @@ class TopicProfetGNNDataset(Dataset):
                             stored_path = os.path.basename(stored_data['path'])[:-4]
                             condition = df_stacking_csv['path'].str.contains(stored_path)
 
-                            # condition = df_stacking_csv['path'] == stored_data['path'][21:-4]
                             selected_rows = df_stacking_csv[condition]
 
                             if selected_rows.empty:
@@ -396,7 +390,6 @@ class ModelWrappedWithMSELoss(nn.Module):
         output = output.view(target.size(0), -1).to(torch.float32)
         if output.size(1) == 1:
             output = output.view(target.size(0))
-        # loss for printing and to select the best model
         select_loss = self.criterion(output, target)
         select_loss = select_loss.mean().view(1, 1)
         backward_loss = select_loss
@@ -436,26 +429,20 @@ def pack_to_longest(batch):
 
     label = torch.tensor(label_list)
 
-    pre_len = 50
-    qa_max_len = len_qa.max()
-    gnn_masks = []
-    for gnn_qa_real_len in len_qa:
-        # gnn_mask = np.ones((pre_len + qa_max_len, pre_len + qa_max_len))
-        gnn_mask = np.tril(
-            np.ones((pre_len + qa_max_len, pre_len + qa_max_len)))
-        gnn_qa_mask = np.zeros((pre_len + qa_max_len, pre_len + qa_max_len))
-        gnn_qa_mask[0:pre_len + gnn_qa_real_len,
-                    0:pre_len + gnn_qa_real_len] = 1
-        # gnn_mask = gnn_qa_mask
-        gnn_mask = gnn_mask * gnn_qa_mask
-        gnn_mask[:pre_len, :pre_len] = np.eye(pre_len)
-        gnn_mask[:pre_len, pre_len:] = 0
-        
-        # ablation
-        # gnn_mask[:pre_len, :pre_len] = 0
-        # gnn_mask[pre_len:, pre_len:] = 0
-        
-        gnn_masks.append(gnn_mask)
+        pre_len = 50
+        qa_max_len = len_qa.max()
+        gnn_masks = []
+        for gnn_qa_real_len in len_qa:
+            gnn_mask = np.tril(
+                np.ones((pre_len + qa_max_len, pre_len + qa_max_len)))
+            gnn_qa_mask = np.zeros((pre_len + qa_max_len, pre_len + qa_max_len))
+            gnn_qa_mask[0:pre_len + gnn_qa_real_len,
+                        0:pre_len + gnn_qa_real_len] = 1
+            gnn_mask = gnn_mask * gnn_qa_mask
+            gnn_mask[:pre_len, :pre_len] = np.eye(pre_len)
+            gnn_mask[:pre_len, pre_len:] = 0
+            
+            gnn_masks.append(gnn_mask)
 
     gnn_masks = torch.tensor(np.array(gnn_masks)).float()
 
@@ -468,7 +455,6 @@ def pack_to_longest(batch):
         'pre_mask': pre_mask,
         'qa_mask': qa_mask,
         'gnn_mask': gnn_masks,
-        # 'padded_len': pre_len + len_qa
         'padded_len': len_qa,
         'pre_topic': new_pre_topic,
         'qa_topic': new_qa_topic
@@ -521,12 +507,9 @@ class GCATrainer(object):
         self.model_with_loss.init_model(self.config.model)
         self.model, self.criterion = self.model_with_loss.model, self.model_with_loss.criterion
 
-        # logging.info(self.model)
-
         num_parameters = sum([l.nelement() for l in self.model.parameters()])
         logging.info("number of parameters: %d", num_parameters)
 
-        # optim
         optim_params = vars(self.config.optim)
         if optim_params['optimizer'] == 'Adagrad':
             del optim_params['optimizer']
@@ -551,9 +534,6 @@ class GCATrainer(object):
 
         best_score = float('inf')
 
-        # load data
-        # Use paths from config file
-        # Use all but last year for training, last year for validation
         train_paths = self.config.data.train_path[:-1] if len(self.config.data.train_path) > 1 else self.config.data.train_path
         val_paths = [self.config.data.train_path[-1]] if len(self.config.data.train_path) > 1 else self.config.data.test_path[:1]
         
@@ -658,7 +638,6 @@ class GCATrainer(object):
                 logging.info(
                     f'Learning rate = {self.scheduler.get_last_lr()[0]}')
 
-        # save checkpoint
         states = [
             self.model.state_dict(),
             self.optimizer.state_dict(),
@@ -677,7 +656,6 @@ class GCATrainer(object):
                     self.args.checkpoint, 'latest_checkpoint.pth'))
             self.model.load_state_dict(pretrained_data[0])
 
-        # Use test path from config file
         test_dataset = TopicProfetGNNDataset(self.config.data.test_path,
                                              label_name=self.config.data.label, lock_target=False)
 
@@ -727,7 +705,6 @@ class GCATrainer(object):
             print(f"Kendall's tau: {kendall_tau}")
             print(f"Kendall's p-value: {kendall_pvalue}")
             
-            
             df = pd.DataFrame(
                 {
                     'file_path': data_path,
@@ -735,10 +712,6 @@ class GCATrainer(object):
                     'label': y
                 }
             )
-            # Save results if needed
-            # output_csv = os.path.join('result', 'csv', '10d.csv')
-            # os.makedirs(os.path.dirname(output_csv), exist_ok=True)
-            # df.to_csv(output_csv, index=False, encoding='utf-8')
 
         logging.info(
             f'label is {self.config.data.label}, mse is {np.mean(mse_list)}, mae is {np.mean(mae_list)}')
@@ -759,7 +732,6 @@ class GCATrainer(object):
         
         self.model.eval()
         
-        # Load LDA model
         lda_model_path = os.path.join('result', 'checkpoint', 'LDA', 'sent_lda.model')
         model = gensim.models.wrappers.LdaMallet.load(lda_model_path)
         lda_model = gensim.models.wrappers.ldamallet.malletmodel2ldamodel(model)
@@ -770,12 +742,10 @@ class GCATrainer(object):
         
         encoder = SentenceTransformer('all-MiniLM-L6-v2')
         
-        # Load data
         results_path = os.path.join('result', 'output', 'results_60d.csv')
         df = pd.read_csv(results_path)
         sorted_df = df.sort_values(by='label_60d', ascending=False)
         
-        # Load sentiment word lists
         positive_words = read_dict(os.path.join('data', 'LM_positive.txt'))
         negative_words = read_dict(os.path.join('data', 'LM_negative.txt'))
         
@@ -783,9 +753,7 @@ class GCATrainer(object):
         
         inter_topic_neg_list = []
         
-        
         for file_path, firm_risk in tqdm(zip(sorted_df['file_path'], sorted_df['label_60d']), total=len(sorted_df['file_path'])):
-            # Read transcript file
             cur_df = pd.read_csv(file_path)
             cur_df.dropna(inplace=True)
             cur_df.reset_index(drop=True, inplace=True)
@@ -794,7 +762,6 @@ class GCATrainer(object):
             cur_data['path'] = file_path
             cur_data['label'] = firm_risk
             
-            # presentation
             pre = cur_df.loc[(cur_df['section'] == 'intro')]['sentence']
             merged_pre = " ".join(pre)
             pre_sentences = sent_tokenize(merged_pre)
@@ -811,7 +778,6 @@ class GCATrainer(object):
             round_qat = []
             q_words = []
             a_words = []
-            # question-answer drop the final question, always thanks. if index i+1 - index i == 1, drop it
             q_index = cur_df.loc[(cur_df['section'] == 'qa') & (cur_df['role'] == 'analyst')].index
             for i in range(len(q_index) - 1):
                 if q_index[i + 1] - q_index[i] > 1:  ## > 1 represents containing "a"
@@ -850,8 +816,6 @@ class GCATrainer(object):
             cur_data['a_reps'] = round_ar
             cur_data['qa_topic_pro'] = round_qat
             
-            
-            # construct data
             X_path = []
             X_pre = []
             X_q = []
@@ -935,7 +899,6 @@ class GCATrainer(object):
             if not ori_loss.item() < 0.1619:
                 continue
             
-            # feed data to model
             node_score = {}
             
             for i in range(qa_max_len):
@@ -967,8 +930,7 @@ class GCATrainer(object):
                 
                 node_score[str(i)] = np.abs(loss.item()-ori_loss.item())
             
-            sorted_index = sorted(node_score.keys(), key=lambda k: node_score[k], reverse=True)                
-            
+            sorted_index = sorted(node_score.keys(), key=lambda k: node_score[k], reverse=True)
             
             inter_topic_neg = {}
             inter_topic_neg['path'] = file_path
@@ -983,7 +945,6 @@ class GCATrainer(object):
             inter_topic_neg_list.append(inter_topic_neg)
             counter += 1
         
-        # Save interpretability results
         output_path = os.path.join('result', 'output', 'inter_topic_neg.pkl')
         os.makedirs(os.path.dirname(output_path), exist_ok=True)
         with open(output_path, 'wb') as file: 

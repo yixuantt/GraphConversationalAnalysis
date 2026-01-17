@@ -14,8 +14,6 @@ from copy import deepcopy
 import threading
 import queue
 
-# logging.getLogger('gensim').setLevel(logging.WARNING)
-
 # NLP stuff
 import contractions
 import demoji
@@ -41,17 +39,12 @@ with open('dataset/stopwords.txt', 'r', encoding='utf-8') as file:
     custom_stopwords = set([line.strip() for line in file])
 
 from nltk.corpus import sentiwordnet as swn
-# Do this first, that'll do something eval()
-# to "materialize" the LazyCorpusLoader
 next(swn.all_senti_synsets())
 wnl = WordNetLemmatizer()
 
 
 def preprocess_text(text):
     """This function preprocesses a single text string."""
-    # Initialize pandarallel (optional if you don't use it here)
-    # pandarallel.initialize(nb_workers=os.cpu_count())
-
     # convert to lowercase
     text = ' '.join([w.lower() for w in text.split()])
 
@@ -101,7 +94,6 @@ def preprocess(text_col):
     text_col = text_col.apply(lambda x: ' '.join(re.sub("[^a-zA-Z]+", " ", x).split()))
 
     # remove stopwords
-    # stopwords = [sw for sw in nltk.corpus.stopwords.words('english') if sw not in ['not', 'no']]
     text_col = text_col.apply(lambda x: ' '.join([w for w in x.split() if w not in custom_stopwords]))
 
     # lemmatization
@@ -149,8 +141,7 @@ def parallel_preprocess_pandarallel(text_col):
     text_col = text_col.parallel_apply(lambda x: ' '.join(re.sub("[^a-zA-Z]+", " ", x).split()))
 
     # remove stopwords
-    # stopwords = [sw for sw in nltk.corpus.stopwords.words('english') if sw not in ['not', 'no']]
-    text_col = text_col.apply(lambda x: ' '.join([w for w in x.split() if w not in stopwords]))
+    text_col = text_col.apply(lambda x: ' '.join([w for w in x.split() if w not in custom_stopwords]))
 
     # lemmatization
     text_col = text_col.apply(lambda x: ' '.join([WordNetLemmatizer().lemmatize(w) for w in x.split()]))
@@ -186,12 +177,10 @@ def compute_coherence_values(dictionary, corpus, texts, limit, start=2, step=3, 
                                                  num_topics=num_topics,
                                                  id2word=dictionary,
                                                  random_seed=1234,
-                                                #  alpha=50,
                                                  workers=os.cpu_count())
 
         model.save(os.path.join(out_model_path, f"sent_lda_topic_{num_topics}.model"))
         lda_model = gensim.models.wrappers.ldamallet.malletmodel2ldamodel(model)
-        # model_list.append(model)
         coherencemodel = CoherenceModel(model=lda_model, texts=texts, dictionary=dictionary, coherence='c_v')
         score = coherencemodel.get_coherence()
         coherence_values.append(score)
@@ -336,11 +325,6 @@ def main():
             merged_pre = sent_tokenize(' '.join(preprocess(pre)))
             merged_pre_filtered = [sent for sent in merged_pre if len(word_tokenize(sent)) > 15]
 
-            # question-answer
-            # q_a = cur_df.loc[(cur_df['section'] == 'qa')].dropna(axis=0, subset=['sentence'])['sentence']
-            # merged_qa = ' '.join(preprocess(q_a))
-            # new_qa_per_text.append(merged_qa)
-
             return merged_pre_filtered
 
         new_sent_copora = []
@@ -367,8 +351,6 @@ def main():
             return re.sub("[^a-zA-Z]+", " ", x).split()
 
         processed_data = multi_thread_process_list(sentences, collate_fn=drop_punctuation, num_worker=15)
-
-        # processed_data = [text.split() for text in new_sentences]
 
         if not os.path.exists(out_dict_path):
             print('generating the dictionary...')
@@ -403,18 +385,13 @@ def main():
 
             logging.info(f"LDA model training finished. Coherence_values: {coherence_values}")
 
-            # limit = 61
-            # start = 36
-            # step = 4
             x = range(start, limit, step)
             plt.plot(x, coherence_values)
             plt.xlabel("Num Topics")
             plt.ylabel("Coherence score")
             plt.legend(("coherence_values"), loc='best')
-            # Create figure directory if it doesn't exist
             os.makedirs("result/figure", exist_ok=True)
             plt.savefig("result/figure/sent_lda_coherence_0707.png", dpi=500)
-            # plt.show()
 
             for m, cv in zip(x, coherence_values):
                 print(f"Num Topics = {m} has Coherence Value of {round(cv, 4)}")
@@ -428,7 +405,6 @@ def main():
                                                      alpha=5,
                                                      workers=os.cpu_count()-1)
 
-            # Create checkpoint directory if it doesn't exist
             os.makedirs(args.checkpoint, exist_ok=True)
             model.save(out_model_path)
 
@@ -437,29 +413,6 @@ def main():
     lda_model = gensim.models.wrappers.ldamallet.malletmodel2ldamodel(model)
     
     top_k = 10
-    # beta = lda_model.get_topics()
-    # print(beta.shape)  # [50, 30952]
-    
-    # with open(os.path.join(args.checkpoint, "sent_lda_id2word.pkl"), 'rb') as fIn:
-    #             id2word = pickle.load(fIn)
-    
-    # def print_topic_to_list_with_rerank(beta, vocab, top_k=20):
-    #     topic_id = 0
-    #     topwords = []
-    #     word_sum_prob = np.sum(beta, axis=0)
-    #     normalized_beta = beta / word_sum_prob
-    #     print(beta.shape)
-    #     for t, topic_word in enumerate(normalized_beta):
-    #         term_idx = np.argsort(topic_word)
-    #         topKwords = []
-    #         for j in np.flip(term_idx[-top_k:]):
-    #             topKwords.append(vocab[j])
-    #         print('topic', topic_id,':', ' '.join(topKwords))
-    #         topic_id += 1
-    #         topwords.append(topKwords)
-    #     return topwords
-    
-    # topwords = print_topic_to_list_with_rerank(beta, id2word)
     for idx, topic in lda_model.print_topics(num_topics=-1, num_words=top_k):
         print(f"Topic {idx + 1}: {topic}")
     
@@ -467,22 +420,8 @@ def main():
     encoder = SentenceTransformer('all-MiniLM-L6-v2')
     get_topic_rep(lda_model, os.path.join(args.out_dir, "sent_lda_rep_v2_0707.pkl"), encoder)
 
-    # exit()
-
     '''for each earning call, find presentation, question-answer pair'''
     encoder = SentenceTransformer('all-MiniLM-L6-v2')
-    # model_pre = gensim.models.wrappers.LdaMallet.load(os.path.join(args.checkpoint, "lda_pre.model"))
-    # model_qa = gensim.models.wrappers.LdaMallet.load(os.path.join(args.checkpoint, "lda_qa.model"))
-    # model_all = gensim.models.wrappers.LdaMallet.load(os.path.join(args.checkpoint, "lda_all.model"))
-    # lda_model_pre = gensim.models.wrappers.ldamallet.malletmodel2ldamodel(model_pre)
-    # lda_model_qa = gensim.models.wrappers.ldamallet.malletmodel2ldamodel(model_qa)
-    # lda_model_all = gensim.models.wrappers.ldamallet.malletmodel2ldamodel(model_all)
-    # with open(os.path.join(args.checkpoint, "lda_pre_id2word.pkl"), 'rb') as fIn:
-    #     id2word_pre = pickle.load(fIn)
-    # with open(os.path.join(args.checkpoint, "lda_qa_id2word.pkl"), 'rb') as fIn:
-    #     id2word_qa = pickle.load(fIn)
-    # with open(os.path.join(args.checkpoint, "lda_all_id2word.pkl"), 'rb') as fIn:
-    #     id2word_all = pickle.load(fIn)
     with open(os.path.join(args.checkpoint, "sent_lda_id2word.pkl"), 'rb') as fIn:
         id2word_all = pickle.load(fIn)
 
@@ -492,7 +431,6 @@ def main():
 
     for year in [2015, 2016, 2017, 2018]:
         df = filtered_df[filtered_df['year'] == year]
-        # df = df[300:310]
         all_data = []
         for path, post_10, post_20, post_60 in tqdm(zip(df['path'],
                                                         df['firm_std_10_post'],
@@ -518,24 +456,10 @@ def main():
             pre_sentences = sent_tokenize(merged_pre)
             pre_reps = encoder.encode(pre_sentences, show_progress_bar=False)
             
-            # Experiment 0721: Replace sentenceBERT with LDA topic vector (commented out)
-            # pre_rep_list = []
-            # for pre_sentence in pre_sentences:
-            #     preprocessed_pre = ' '.join(preprocess_text(pre_sentence)).split()
-            #     corpus = id2word_all.doc2bow(preprocessed_pre)
-            #     pre_topic_pro = lda_model.get_document_topics(corpus)
-            #     topic_vecotr = [0.0] * 50
-            #     for index, value in pre_topic_pro:
-            #         topic_vecotr[index] = value
-            #     pre_rep_list.append(topic_vecotr)
-            # new_pre_reps = np.stack(pre_rep_list, axis=0)
-            
-            cur_data['pre_reps'] = pre_reps  # Use sentence-BERT embeddings
-            # cur_data['pre_reps'] = new_pre_reps  # LDA topic vector (commented out)
+            cur_data['pre_reps'] = pre_reps
 
             preprocessed_pre = ' '.join(preprocess(pre)).split()
             corpus = id2word_all.doc2bow(preprocessed_pre)
-            # pre_topic_pro = lda_model_all.get_document_topics(corpus)
             pre_topic_pro = lda_model.get_document_topics(corpus)
             cur_data['pre_topic_pro'] = pre_topic_pro
 
@@ -552,64 +476,25 @@ def main():
                     round_q_sentences = sent_tokenize(merged_q)
                     round_q_reps = encoder.encode(round_q_sentences, show_progress_bar=False)
                     
-                    # Experiment 0721: Replace sentenceBERT with LDA topic vector (commented out)
-                    # q_rep_list = []
-                    # for round_q_sentence in round_q_sentences:
-                    #     preprocessed_q = ' '.join(preprocess_text(round_q_sentence)).split()
-                    #     corpus = id2word_all.doc2bow(preprocessed_q)
-                    #     q_topic_pro = lda_model.get_document_topics(corpus)
-                    #     topic_vecotr = [0.0] * 50
-                    #     for index, value in q_topic_pro:
-                    #         topic_vecotr[index] = value
-                    #     q_rep_list.append(topic_vecotr)
-                    # new_round_q_reps = np.stack(q_rep_list, axis=0)
-
-                    round_qr.append(round_q_reps)  # Use sentence-BERT embeddings
-                    # round_qr.append(new_round_q_reps)  # LDA topic vector (commented out)
+                    round_qr.append(round_q_reps)
 
                     preprocessed_q = ' '.join(preprocess(cur_df.loc[[q_index[i]]]['sentence'])).split()
-                    # corpus = id2word_all.doc2bow(preprocessed_q)
-                    # q_topic_pro = lda_model_all.get_document_topics(corpus)
-                    # round_qt.append(q_topic_pro)
 
                     a_index = list(range(q_index[i] + 1, q_index[i + 1]))
                     merged_a = " ".join(cur_df.loc[a_index]['sentence'])
                     round_a_sentences = sent_tokenize(merged_a)
                     round_a_reps = encoder.encode(round_a_sentences, show_progress_bar=False)
                     
-                    # Experiment 0721: Replace sentenceBERT with LDA topic vector (commented out)
-                    # a_rep_list = []
-                    # for round_a_sentence in round_a_sentences:
-                    #     preprocessed_a = ' '.join(preprocess_text(round_a_sentence)).split()
-                    #     corpus = id2word_all.doc2bow(preprocessed_a)
-                    #     a_topic_pro = lda_model.get_document_topics(corpus)
-                    #     topic_vecotr = [0.0] * 50
-                    #     for index, value in a_topic_pro:
-                    #         topic_vecotr[index] = value
-                    #     a_rep_list.append(topic_vecotr)
-                    # new_round_a_reps = np.stack(a_rep_list, axis=0)
-                    
-                    round_ar.append(round_a_reps)  # Use sentence-BERT embeddings
-                    # round_ar.append(new_round_a_reps)  # LDA topic vector (commented out)
+                    round_ar.append(round_a_reps)
 
                     preprocessed_a = ' '.join(preprocess(cur_df.loc[a_index]['sentence'])).split()
-                    # corpus = id2word_all.doc2bow(preprocessed_a)
-                    # a_topic_pro = lda_model_all.get_document_topics(corpus)
-                    # round_at.append(a_topic_pro)
                     corpus = id2word_all.doc2bow(preprocessed_q + preprocessed_a)
-                    # qa_topic_pro = lda_model_all.get_document_topics(corpus)
                     qa_topic_pro = lda_model.get_document_topics(corpus)
                     round_qat.append(qa_topic_pro)
 
             cur_data['q_reps'] = round_qr
             cur_data['a_reps'] = round_ar
-            # cur_data['q_topic_pro'] = round_qt
-            # cur_data['a_topic_pro'] = round_at
             cur_data['qa_topic_pro'] = round_qat
-            # print(cur_data.keys())
-            # for key, item in cur_data.items():
-            #     print(f"{key}: {len(item)}")
-            # exit()
             all_data.append(cur_data)
 
         # Create processed directory if it doesn't exist
@@ -618,7 +503,7 @@ def main():
             pickle.dump(all_data, fOut, protocol=pickle.HIGHEST_PROTOCOL)
         logging.info(f"dataset/processed/topic_sent_bert_based_data_{str(year)}.pkl has been saved.")
         gc.collect()
-        
+
 
 if __name__ == '__main__':
     main()

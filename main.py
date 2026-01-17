@@ -54,7 +54,6 @@ def parse_args_and_config():
     if not os.path.exists(args.checkpoint):
         os.makedirs(args.checkpoint)
 
-    # parse config file
     with open(os.path.join('conf', args.config), 'r') as f:
         config = yaml.safe_load(f)
     new_config = dict2namespace(config)

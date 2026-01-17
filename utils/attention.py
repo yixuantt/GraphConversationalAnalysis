@@ -98,8 +98,6 @@ class ScaledDotProductAttention(nn.Module):
 
         b_s, nq = queries.shape[:2]
         nk = keys.shape[1]
-        # print('queries.shape[:2]:',queries.shape[:2])
-        # print('keys.shape[1]:',keys.shape[1])
         q = self.fc_q(queries).view(b_s, nq, self.h, self.d_k).permute(
             0, 2, 1, 3)  # (b_s, h, nq, d_k)
         k = self.fc_k(keys).view(b_s, nk, self.h, self.d_k).permute(
@@ -117,13 +115,9 @@ class ScaledDotProductAttention(nn.Module):
             att = att.masked_fill(~attention_mask, -np.inf)
         att_out = att
         att = F.softmax(att, -1)
-        # att = self.dropout(att)
-        # print('att:', att.shape)
         out = torch.matmul(att, v).permute(0, 2, 1, 3).contiguous().view(
             b_s, nq, self.h * self.d_v)  # (b_s, nq, h*d_v)
         out = self.fc_o(out)  # (b_s, nq, d_model)
-        # print('out:', out.shape)
-        # out = self.dropout(out) + residual
 
         out = self.layer_norm(residual + out)
 
@@ -175,26 +169,3 @@ class LstmAttention(nn.Module):
     def __init__(self):
         super(LstmAttention, self).__init__()
         pass
-    #     self.embedding = nn.Embedding(vocab_size, embedding_dim)
-    #     self.lstm = nn.LSTM(embedding_dim, n_hidden, bidirectional=True)
-    #     self.out = nn.Linear(n_hidden * 2, num_classes)
-    #
-    # def attention_net(self, lstm_output, final_state):
-    #     hidden = final_state.view(-1, n_hidden * 2, 1)
-    #     attn_weights = torch.bmm(lstm_output, hidden).squeeze(2)
-    #     soft_attn_weights = F.softmax(attn_weights, 1)
-    #
-    #     context = torch.bmm(lstm_output.transpose(1, 2), soft_attn_weights.unsqueeze(2)).squeeze(2)
-    #     return context, soft_attn_weights.data.numpy()
-    #
-    # def forward(self, X):
-    #     input = self.embedding(X) # input : [batch_size, len_seq, embedding_dim]
-    #     input = input.permute(1, 0, 2) # input : [len_seq, batch_size, embedding_dim]
-    #
-    #     hidden_state = Variable(torch.zeros(1*2, len(X), n_hidden))
-    #     cell_state = Variable(torch.zeros(1*2, len(X), n_hidden))
-    #
-    #     output, (final_hidden_state, final_cell_state) = self.lstm(input, (hidden_state, cell_state))
-    #     output = output.permute(1, 0, 2)
-    #     attn_output, attention = self.attention_net(output, final_hidden_state)
-    #     return self.out(attn_output), attention

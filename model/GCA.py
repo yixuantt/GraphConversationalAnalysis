@@ -87,20 +87,8 @@ class TopicProfetGNN(nn.Module):
                                     hid_bn=hid_bn,
                                     out_bn=out_bn)
 
-        # self.sa = SimpleConcatAttention(emb_dim=self.embedding_size)
         self.sa = ScaledDotProductAttention(
             d_model=self.embedding_size, d_k=self.embedding_size, d_v=self.embedding_size, h=1, dropout=dropout)
-        '''comment in 0706'''
-        # self.ggan = GatedGNN(input_dim=self.embedding_size+1,
-        #                      output_dim=self.embedding_size+1, dropout=dropout)
-
-        # # self.final = nn.Linear(self.embedding_size, 1)
-        # self.gru_pre = nn.GRU(input_size=self.embedding_size+1,
-        #                       hidden_size=self.embedding_size+1, batch_first=True, bidirectional=True)
-
-        # self.gru_qa = nn.GRU(input_size=self.embedding_size+1,
-        #                      hidden_size=self.embedding_size+1, batch_first=True, bidirectional=True)
-        '''comment in 0706'''
         
         self.gru_pre = nn.GRU(input_size=self.embedding_size,
                               hidden_size=self.embedding_size, batch_first=True, bidirectional=True)
@@ -163,55 +151,25 @@ class TopicProfetGNN(nn.Module):
         a_rep = a_rep.float()
         
         score = pre_rep @ topic_rep.t()  # [b, l, 50]
-        
-        # score = pre_rep @ self.topic_rep.t()  # [b, l, 50]
         score = F.softmax(score, dim=-1)
-        
-        # print(score[0])
-        # exit()
-        
         score = score.permute(0, 2, 1)  # [b, 50, l]
         batch_topic_pre = score @ pre_rep  # [b, 50, d]
-        
-        # print(pre_topic[0].shape)
-        # print(pre_topic[0])
-        # exit()
         
         qa_rep = (q_rep + a_rep) / 2
         
         gnn_topic = torch.cat([pre_topic, qa_topic], dim=1)
         
-        # batch_topic_pre[:, :] = 0
-    
         gnn_in = torch.cat([batch_topic_pre, qa_rep], dim=1)
         
-        # gnn_mask = torch.ones_like(gnn_mask).cuda()
-        # gnn_mask = torch.tril(gnn_mask)
-        
-        # gnn_out = gnn_in
         gnn_out = self.ggan(gnn_mask, gnn_in, gnn_topic)
         
         h_pre_pack = gnn_out[:, :50, :]
         h_qa_pack = gnn_out[:, 50:, :] 
         qa_mask = qa_mask.unsqueeze(-1)
-        # print(h_qa_pack.shape, qa_mask.shape)
-        # exit()
-        
         
         h_qa_pack = h_qa_pack * qa_mask    
         
-        # h_pre = torch.mean(h_pre_pack, dim=1)
-        # h_qa = torch.mean(h_qa_pack, dim=1)
-        
-        # h_pre_weight = self.linear_pre(h_pre_pack)
-        # h_pre_weight = torch.softmax(h_pre_weight, dim=1)
-        # h_pre = torch.sum(h_pre_pack * h_pre_weight, dim=1)
-        
         topic_weights = torch.softmax(torch.sum(qa_topic, dim=1), dim=-1)  # [b, 50]
-        
-        # topic_weights = qa_topic.sum(dim=1) # [b, 50]
-        # topic_weights_sum = topic_weights.sum(dim=-1, keepdim=True)
-        # topic_weights = topic_weights / topic_weights_sum  # [b, 50]
         
         h_pre_weighted = h_pre_pack * topic_weights.unsqueeze(-1) # [b, 50, d]
         h_pre = h_pre_weighted.sum(dim=1)  # [b, d]
@@ -220,36 +178,10 @@ class TopicProfetGNN(nn.Module):
         
         qa_weights = torch.softmax(torch.sum(qa_weights, dim=-1), dim=-1)  # [b, l]
         
-        # qa_weights = qa_weights.sum(dim=-1)  # [b, l]
-        # qa_weights_sum = qa_weights.sum(dim=-1, keepdim=True)  # [b, l, 1]
-        # qa_weights = qa_weights / qa_weights_sum  # [b, l]
-        
         h_qa_weighted = h_qa_pack * qa_weights.unsqueeze(-1)  # [b, l, d]
         h_qa = h_qa_weighted.sum(dim=1)  # [b, d]
         
-        # h_qa_weight = self.linear_qa(h_qa_pack)
-        # h_qa_weight = torch.softmax(h_qa_weight, dim=1)
-        # h_qa = torch.sum(h_qa_pack * h_qa_weight, dim=1)
-        
         h = torch.cat([h_pre, h_qa], dim=-1)
-        '''ours'''
-        
-        '''ablation W/o GNN epoch 30'''
-        # qa_rep = (q_rep + a_rep) / 2
-        # qa_rep = qa_rep * qa_mask.unsqueeze(-1)
-        # pre_rep = pre_rep * pre_mask.unsqueeze(-1)
-        
-        # h_pre_weight = self.linear(pre_rep)
-        # h_pre_weight = torch.softmax(h_pre_weight, dim=1)
-        # h_pre = torch.sum(pre_rep * h_pre_weight, dim=1)
-        
-        # h_qa_weight = self.linear(qa_rep)
-        # h_qa_weight = torch.softmax(h_qa_weight, dim=1)
-        # h_qa = torch.sum(qa_rep * h_qa_weight, dim=1)
-        
-        # h = torch.cat([h_pre, h_qa], dim=-1)
-        '''ablation w/o GNN'''
-        
         h = h.float()
         
         return self.ff(h)
@@ -280,12 +212,10 @@ class TopicProfetGNN(nn.Module):
             pre_topic = torch.eye(50, device=pre_rep.device)            \
                            .unsqueeze(0).repeat(B, 1, 1)                # [B,50,50]
 
-        # ③ qa_topic: obtained using q_rep→topic_rep according to current implementation
         if qa_topic is None:
             topic_rep = self.linear(self.topic_rep)                     # [50,D]
             qa_topic = torch.softmax(q_rep @ topic_rep.t(), dim=-1)     # [B,L_qa,50]
 
-        # ④ gnn_mask: fully connected, shape [B, N, N]
         if gnn_mask is None:
             N = 50 + L_qa
             gnn_mask = torch.ones(B, N, N, device=pre_rep.device)

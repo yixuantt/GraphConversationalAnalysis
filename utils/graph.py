@@ -24,7 +24,6 @@ class SimpleGatedGNN(nn.Module):
         self.gru = nn.GRUCell(input_size=input_dim, hidden_size=output_dim)
         self.W = nn.Parameter(torch.Tensor(input_dim, output_dim))
         nn.init.xavier_uniform_(self.W.data)
-        # nn.init.xavier_uniform_(self.a.data)
 
         self.leakyrelu = nn.LeakyReLU(alpha)
 
@@ -65,49 +64,14 @@ class GatedGNN(nn.Module):
         self.layer_norm = nn.LayerNorm(output_dim)
 
     def forward(self, adj_mask, x, x_topic):
-        # print(adj_mask[0])
-        # for i in range(adj_mask[0].size(1)):
-        #     print(i, adj_mask[0][i].sum())
-        # exit()
-        
-        # input = x
         batch_size = x.size(0)
         Wh = torch.matmul(x, self.W)  # (B, N, out_features)
-        # Wh1 = torch.matmul(Wh, self.a[:self.out_features, :])  # (B, N, 1)
-        # Wh2 = torch.matmul(Wh, self.a[self.out_features:, :])  # (B, N, 1)
-        # e = self.leakyrelu(Wh1 + Wh2.permute(0, 2, 1))
-        # print(Wh.shape)
-        # exit()
-        # embedding sim
-        # e = F.cosine_similarity(Wh.unsqueeze(1), Wh.unsqueeze(2), dim=-1)
         e = F.cosine_similarity(x_topic.unsqueeze(1), x_topic.unsqueeze(2), dim=-1)
-        
-        # Optionally save visualization
-        # numpy_matrix = e[0].cpu().numpy()
-        # plt.imshow(numpy_matrix, cmap='viridis')
-        # output_path = os.path.join('result', 'output', 'topic_similarity.pdf')
-        # os.makedirs(os.path.dirname(output_path), exist_ok=True)
-        # plt.savefig(output_path)
         
         padding = (-2 ** 31) * torch.ones_like(e)
         attention = torch.where(adj_mask > 0, e, padding)  # (B, N, N)
         attention = F.softmax(attention, dim=-1)
         
-        # padding = 0 * torch.ones_like(e)
-        # attention = torch.where(adj_mask > 0, e, padding)  # (B, N, N)
-        # attention_sum = attention.sum(dim=-1, keepdim=True)
-        # attention = attention / (attention_sum + 1e-7)
-        
-        
-        # Optionally save attention visualization
-        # numpy_matrix = attention[0].cpu().numpy()
-        # plt.imshow(numpy_matrix, cmap='viridis')
-        # plt.colorbar()
-        # output_path = os.path.join('result', 'output', 'attention_similarity.pdf')
-        # os.makedirs(os.path.dirname(output_path), exist_ok=True)
-        # plt.savefig(output_path)
-        
-
         attention = F.dropout(attention, self.dropout)
         
         attention = attention.float()
@@ -118,7 +82,6 @@ class GatedGNN(nn.Module):
         graph_out = graph_out.reshape(-1, self.out_features)
         x = x.reshape(-1, self.out_features)
 
-        # output = self.layer_norm(x + graph_out)
         output = self.gru(graph_out, x)
 
         output = output.reshape(batch_size, -1, self.out_features)

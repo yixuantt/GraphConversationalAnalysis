@@ -121,7 +121,6 @@ def preprocess_data(args):
                 'firm_std_60_post': processed_firm_std_60_post,
             }
         )
-        # Create output directory if it doesn't exist
         os.makedirs(args.out_dir, exist_ok=True)
         dataframe.to_csv(os.path.join(args.out_dir, args.out_filename), index=False, sep=',')
         logging.info(f"Saved processed data to {os.path.join(args.out_dir, args.out_filename)}")
@@ -148,7 +147,6 @@ def parse_args_and_config():
     if not os.path.exists(args.log):
         os.makedirs(args.log)
 
-    # Setup logger
     level = getattr(logging, args.verbose.upper(), None)
     if not isinstance(level, int):
         raise ValueError('level {} not supported'.format(args.verbose))
