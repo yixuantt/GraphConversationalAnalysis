@@ -429,20 +429,20 @@ def pack_to_longest(batch):
 
     label = torch.tensor(label_list)
 
-        pre_len = 50
-        qa_max_len = len_qa.max()
-        gnn_masks = []
-        for gnn_qa_real_len in len_qa:
-            gnn_mask = np.tril(
-                np.ones((pre_len + qa_max_len, pre_len + qa_max_len)))
-            gnn_qa_mask = np.zeros((pre_len + qa_max_len, pre_len + qa_max_len))
-            gnn_qa_mask[0:pre_len + gnn_qa_real_len,
-                        0:pre_len + gnn_qa_real_len] = 1
-            gnn_mask = gnn_mask * gnn_qa_mask
-            gnn_mask[:pre_len, :pre_len] = np.eye(pre_len)
-            gnn_mask[:pre_len, pre_len:] = 0
-            
-            gnn_masks.append(gnn_mask)
+    pre_len = 50
+    qa_max_len = len_qa.max()
+    gnn_masks = []
+    for gnn_qa_real_len in len_qa:
+        gnn_mask = np.tril(
+            np.ones((pre_len + qa_max_len, pre_len + qa_max_len)))
+        gnn_qa_mask = np.zeros((pre_len + qa_max_len, pre_len + qa_max_len))
+        gnn_qa_mask[0:pre_len + gnn_qa_real_len,
+                    0:pre_len + gnn_qa_real_len] = 1
+        gnn_mask = gnn_mask * gnn_qa_mask
+        gnn_mask[:pre_len, :pre_len] = np.eye(pre_len)
+        gnn_mask[:pre_len, pre_len:] = 0
+        
+        gnn_masks.append(gnn_mask)
 
     gnn_masks = torch.tensor(np.array(gnn_masks)).float()
 
